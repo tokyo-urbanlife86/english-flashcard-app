@@ -23,19 +23,21 @@ export function useAuthGuard() {
 
     async function checkAuth() {
       try {
-        const response = await fetch("/api/me");
-        const data = await response.json();
+        // /api/me と /api/characters は互いに独立なので並列に取得する。
+        const [meResponse, statsResponse] = await Promise.all([
+          fetch("/api/me"),
+          fetch("/api/characters"),
+        ]);
 
         if (ignore) return;
 
-        if (!response.ok) {
+        if (!meResponse.ok) {
           router.replace("/signin");
           return;
         }
 
-        setUser(data.user);
-
-        const statsResponse = await fetch("/api/characters");
+        const meData = await meResponse.json();
+        setUser(meData.user);
 
         if (statsResponse.ok) {
           const statsData = await statsResponse.json();

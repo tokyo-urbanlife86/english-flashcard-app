@@ -42,7 +42,7 @@ export function MyPageHeader({ username, stats, onLogout }: MyPageHeaderProps) {
         </div>
       </div>
 
-      <CharacterStatus />
+      <CharacterStatus count={stats.monthlyCount} />
 
       <div className="flex justify-start md:justify-end">
         <button

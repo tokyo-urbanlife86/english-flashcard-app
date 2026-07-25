@@ -1,6 +1,3 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import Image from "next/image";
 
 function getCharacterSrc(count: number): string {
@@ -27,24 +24,12 @@ const levelTitles: Record<number, string> = {
   5: "神",
 };
 
-export function CharacterStatus() {
-  const [count, setCount] = useState<number | null>(null);
+type CharacterStatusProps = {
+  /** 過去1ヶ月に暗唱した数（親が /api/characters から取得済みの値を渡す） */
+  count: number;
+};
 
-  useEffect(() => {
-    fetch("/api/characters")
-      .then((res) => {
-        if (!res.ok) {
-          return { count: 0 };
-        }
-
-        return res.json();
-      })
-      .then((data: { count: number }) => setCount(data.count))
-      .catch(() => setCount(0));
-  }, []);
-
-  if (count === null) return null;
-
+export function CharacterStatus({ count }: CharacterStatusProps) {
   const level = getCharacterLevel(count);
 
   return (
