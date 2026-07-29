@@ -47,6 +47,10 @@ https://portfolio-r8j7kwo50-gravityhorse86-2226s-projects.vercel.app/signin
 
 <img width="613" height="409" alt="image" src="https://github.com/user-attachments/assets/5010d0da-ef99-4f27-a766-65cedeeac7b3" />
 
+#### Gemini API を用いて、文をワンタッチでカジュアル/フォーマルなものへ添削(「カジュアルに」を押した例)
+
+<img width="287" height="248" alt="Screenshot 2026-07-29 220231" src="https://github.com/user-attachments/assets/4a99dd87-828a-4d87-b09f-2f5cb8a8abbd" />
+
 #### キャラクター進化の例(落ち武者→堅牢な戦士）
 
 1ヶ月間の「覚えた」ボタンを押した数で判定<br>
@@ -70,10 +74,6 @@ https://portfolio-r8j7kwo50-gravityhorse86-2226s-projects.vercel.app/signin
 <img width="362" height="392" alt="image" src="https://github.com/user-attachments/assets/5378be38-5739-4fbb-879a-cf873fc0f530" />
 
 ## 今後の実装予定
-
-<<<<<<< HEAD
-=======
-
 今後は、LLMとの連携で学習をより楽しく、効率的に進められるよう、以下のような実装を考えている。
 
 - AIにより、類似するシチュエーションや、言い回しを変えた暗唱文の提示<br>
@@ -82,13 +82,3 @@ https://portfolio-r8j7kwo50-gravityhorse86-2226s-projects.vercel.app/signin
   「変化球」の文章を提示してくれる。
 - Text to SpeechのAPIを用い、暗唱文を音声朗読する機能の実装
 - SupabaseでRLSの設定をし、セキュリティの安全性を高める
-
-> > > > > > > 64c331a225fa6e473e6c4643817c9daf57e990fc
-
-今後は、LLMとの連携で学習をより楽しく、効率的に進められるよう、以下のような実装を考えている。
-
-- AIにより、類似するシチュエーションや、言い回しを変えた暗唱文の提示<br>
-  →「昨日、雨が降った」と入力すれば、「明日は、雨が降るだろうか？」のように、<br>
-  「雨が降る」という一つのシチュエーションをベースに、時制や主語、疑問や否定などの文の要素を少しずつ変えた、<br>
-  「変化球」の文章を提示してくれる。
-- Text to SpeechのAPIを用い、暗唱文を音声朗読する機能の実装
