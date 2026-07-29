@@ -27,17 +27,6 @@ const requestSchema = z.object({
   sentences: z.array(sentenceSchema).min(1),
 });
 
-async function ensureSentenceStatuses() {
-  await prisma.sentenceStatus.createMany({
-    data: [
-      { id: "0", name: "覚えた" },
-      { id: "1", name: "怪しい" },
-      { id: "2", name: "覚えてない" },
-    ],
-    skipDuplicates: true,
-  });
-}
-
 export async function GET(request: NextRequest) {
   const userId = getSessionUserIdFromRequest(request);
 
@@ -123,8 +112,6 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await ensureSentenceStatuses();
-
     const targetSet = result.data.setId
       ? await prisma.flashcardSet.findFirst({
           where: {

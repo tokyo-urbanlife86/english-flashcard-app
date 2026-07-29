@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { defaultFlashcardSetName } from "@/lib/flashcard-sets";
 import { createPasswordHash } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { getPrismaErrorCode, isPrismaErrorCode } from "@/lib/prisma-error";
@@ -87,7 +88,12 @@ export async function POST(request: Request) {
         id,
         username,
         email,
-        encrypted_password: createPasswordHash(password),
+        password_hash: createPasswordHash(password),
+        flashcardSets: {
+          create: {
+            name: defaultFlashcardSetName,
+          },
+        },
       },
       select: {
         id: true,

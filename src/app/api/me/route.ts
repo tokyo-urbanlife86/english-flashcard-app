@@ -102,7 +102,7 @@ export async function PATCH(request: NextRequest) {
     where: { id: userId },
     select: {
       id: true,
-      encrypted_password: true,
+      password_hash: true,
     },
   });
 
@@ -115,7 +115,7 @@ export async function PATCH(request: NextRequest) {
 
   const { username, email, currentPassword, newPassword } = result.data;
 
-  if (newPassword && !isPasswordCorrect(currentPassword, user.encrypted_password)) {
+  if (newPassword && !isPasswordCorrect(currentPassword, user.password_hash)) {
     return NextResponse.json(
       {
         fieldErrors: {
@@ -133,7 +133,7 @@ export async function PATCH(request: NextRequest) {
         username,
         email,
         ...(newPassword
-          ? { encrypted_password: createPasswordHash(newPassword) }
+          ? { password_hash: createPasswordHash(newPassword) }
           : {}),
       },
       select: {

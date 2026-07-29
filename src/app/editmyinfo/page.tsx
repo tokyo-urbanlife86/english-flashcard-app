@@ -76,7 +76,9 @@ export default function EditMyInfo() {
         setEmail(data.user.email);
       } catch {
         if (!ignore) {
-          setMessage("通信に失敗しました。時間をおいてもう一度お試しください。");
+          setMessage(
+            "通信に失敗しました。時間をおいてもう一度お試しください。",
+          );
         }
       } finally {
         if (!ignore) {
@@ -122,15 +124,15 @@ export default function EditMyInfo() {
       });
       const data = await response.json();
 
-        if (!response.ok) {
-          if (response.status === 401) {
-            router.replace("/signin");
-            return;
-          }
+      if (!response.ok) {
+        if (response.status === 401) {
+          router.replace("/signin");
+          return;
+        }
 
-          if (data.fieldErrors) {
-            setErrors(data.fieldErrors);
-          }
+        if (data.fieldErrors) {
+          setErrors(data.fieldErrors);
+        }
 
         setMessage(data.message ?? "ユーザー情報の更新に失敗しました。");
         return;
@@ -187,7 +189,9 @@ export default function EditMyInfo() {
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-sky-100"
               />
               {errors.username?.[0] && (
-                <p className="mt-1 text-sm text-red-500">{errors.username[0]}</p>
+                <p className="mt-1 text-sm text-red-500">
+                  {errors.username[0]}
+                </p>
               )}
             </div>
 

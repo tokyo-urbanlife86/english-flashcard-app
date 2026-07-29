@@ -6,30 +6,32 @@ import { getSessionUserIdFromRequest } from "@/lib/session";
 
 export const runtime = "nodejs";
 
-const updateStatusSchema = z.object({
-  status_id: z.enum(["0", "1", "2"]).optional(),
-  content: z
-    .string()
-    .trim()
-    .min(1, "英文を入力してください")
-    .refine((value) => value.trim().split(/\s+/).length <= 100, {
-      message: "英文は100語以内で入力してください",
-    })
-    .optional(),
-  translation: z
-    .string()
-    .trim()
-    .min(1, "日本語訳を入力してください")
-    .max(200, "日本語訳は200文字以内で入力してください")
-    .optional(),
-}).superRefine((value, context) => {
-  if (value.status_id || value.content || value.translation) return;
+const updateStatusSchema = z
+  .object({
+    status_id: z.enum(["0", "1", "2"]).optional(),
+    content: z
+      .string()
+      .trim()
+      .min(1, "英文を入力してください")
+      .refine((value) => value.trim().split(/\s+/).length <= 100, {
+        message: "英文は100語以内で入力してください",
+      })
+      .optional(),
+    translation: z
+      .string()
+      .trim()
+      .min(1, "日本語訳を入力してください")
+      .max(200, "日本語訳は200文字以内で入力してください")
+      .optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.status_id || value.content || value.translation) return;
 
-  context.addIssue({
-    code: "custom",
-    message: "更新する内容を入力してください。",
+    context.addIssue({
+      code: "custom",
+      message: "更新する内容を入力してください。",
+    });
   });
-});
 
 export async function PATCH(
   request: NextRequest,
@@ -73,7 +75,7 @@ export async function PATCH(
       ...(result.data.status_id
         ? {
             status_id: result.data.status_id,
-            statusUpdated_at: new Date(),
+            status_updated_at: new Date(),
           }
         : {}),
       ...(result.data.content ? { content: result.data.content } : {}),
@@ -107,7 +109,7 @@ export async function PATCH(
         content: true,
         translation: true,
         status_id: true,
-        statusUpdated_at: true,
+        status_updated_at: true,
       },
     });
 
@@ -156,9 +158,6 @@ export async function DELETE(
   } catch (error) {
     console.error(error);
 
-    return Response.json(
-      { message: "削除に失敗しました。" },
-      { status: 500 },
-    );
+    return Response.json({ message: "削除に失敗しました。" }, { status: 500 });
   }
 }

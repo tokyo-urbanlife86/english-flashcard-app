@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       id: true,
       username: true,
       email: true,
-      encrypted_password: true,
+      password_hash: true,
     },
   });
 
@@ -52,10 +52,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const passwordIsCorrect = isPasswordCorrect(
-    password,
-    user.encrypted_password,
-  );
+  const passwordIsCorrect = isPasswordCorrect(password, user.password_hash);
 
   if (!passwordIsCorrect) {
     return Response.json(

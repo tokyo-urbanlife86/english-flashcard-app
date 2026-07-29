@@ -78,30 +78,35 @@ export function SavedSentenceList({
         </p>
       ) : (
         <ul className="max-h-[28rem] space-y-3 overflow-y-auto pr-1">
-          {savedSentences.map((sentence) => (
-            <SavedSentenceItem
-              key={sentence.id}
-              sentence={sentence}
-              isBusy={sentenceActionId === sentence.id}
-              isEditing={editingSentenceId === sentence.id}
-              editingRow={editingRow}
-              editingErrors={editingErrors}
-              onUpdateEditingRow={updateEditingRow}
-              onSaveEdit={saveSentenceEdit}
-              onCancelEdit={cancelEditingSentence}
-              onStartEditing={startEditingSentence}
-              onDelete={deleteSentence}
-              rewriteSuggestion={rewriteSuggestions[sentence.id]}
-              rewriteError={rewriteErrors[sentence.id]}
-              isAnyRewriting={Boolean(rewriteAction)}
-              rewritingTone={
-                rewriteAction?.id === sentence.id ? rewriteAction.tone : null
-              }
-              onRequestRewrite={requestSentenceRewrite}
-              onCancelRewrite={cancelRewriteSuggestion}
-              onApplyRewrite={applyRewriteSuggestion}
-            />
-          ))}
+          {savedSentences.map((sentence) => {
+            const rewritingTone =
+              rewriteAction?.id === sentence.id ? rewriteAction.tone : null;
+
+            return (
+              <SavedSentenceItem
+                key={sentence.id}
+                sentence={sentence}
+                isBusy={
+                  sentenceActionId === sentence.id || rewritingTone !== null
+                }
+                isEditing={editingSentenceId === sentence.id}
+                editingRow={editingRow}
+                editingErrors={editingErrors}
+                onUpdateEditingRow={updateEditingRow}
+                onSaveEdit={saveSentenceEdit}
+                onCancelEdit={cancelEditingSentence}
+                onStartEditing={startEditingSentence}
+                onDelete={deleteSentence}
+                rewriteSuggestion={rewriteSuggestions[sentence.id]}
+                rewriteError={rewriteErrors[sentence.id]}
+                isAnyRewriting={Boolean(rewriteAction)}
+                rewritingTone={rewritingTone}
+                onRequestRewrite={requestSentenceRewrite}
+                onCancelRewrite={cancelRewriteSuggestion}
+                onApplyRewrite={applyRewriteSuggestion}
+              />
+            );
+          })}
         </ul>
       )}
     </section>

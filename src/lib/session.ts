@@ -60,7 +60,10 @@ export function verifySessionToken(token: string) {
       return null;
     }
 
-    if (typeof payload.expiresAt !== "number" || payload.expiresAt < Date.now()) {
+    if (
+      typeof payload.expiresAt !== "number" ||
+      payload.expiresAt < Date.now()
+    ) {
       return null;
     }
 

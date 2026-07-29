@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { useState } from "react";
 
+import { useAuthGuard } from "@/hooks/useAuthGuard";
+
 const signupSchema = z.object({
   id: z
     .string()
@@ -28,6 +30,11 @@ type FieldErrors = Record<string, string[] | undefined>;
 
 export default function Signup() {
   const router = useRouter();
+  const { isCheckingAuth } = useAuthGuard({
+    redirectAuthenticatedTo: "/mypage",
+    redirectUnauthenticatedTo: null,
+    loadStats: false,
+  });
   const [errors, setErrors] = useState<FieldErrors>({});
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -84,6 +91,14 @@ export default function Signup() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  if (isCheckingAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <p className="text-sm text-slate-500">読み込み中...</p>
+      </div>
+    );
   }
 
   return (
@@ -158,9 +173,7 @@ export default function Signup() {
           </div>
 
           <div className="mt-4 flex flex-col gap-4">
-            {message && (
-              <p className="text-sm text-slate-600">{message}</p>
-            )}
+            {message && <p className="text-sm text-slate-600">{message}</p>}
 
             <button
               type="submit"

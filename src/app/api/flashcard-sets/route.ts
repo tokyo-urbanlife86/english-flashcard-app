@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 
-import { ensureDefaultFlashcardSet } from "@/lib/flashcard-sets";
 import { prisma } from "@/lib/prisma";
 import { isPrismaErrorCode } from "@/lib/prisma-error";
 import { getSessionUserIdFromRequest } from "@/lib/session";
@@ -25,8 +24,6 @@ export async function GET(request: NextRequest) {
       { status: 401 },
     );
   }
-
-  await ensureDefaultFlashcardSet(userId);
 
   const sets = await prisma.flashcardSet.findMany({
     where: { user_id: userId },
@@ -96,7 +93,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return Response.json({ set: { ...set, sentenceCount: 0 } }, { status: 201 });
+    return Response.json(
+      { set: { ...set, sentenceCount: 0 } },
+      { status: 201 },
+    );
   } catch (error) {
     if (isPrismaErrorCode(error, "P2002")) {
       return Response.json(

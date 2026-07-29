@@ -66,7 +66,9 @@ export function SavedSentenceItem({
               className="min-h-24 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-4 focus:ring-sky-100"
             />
             {editingErrors.content && (
-              <p className="mt-1 text-sm text-red-500">{editingErrors.content}</p>
+              <p className="mt-1 text-sm text-red-500">
+                {editingErrors.content}
+              </p>
             )}
           </div>
 

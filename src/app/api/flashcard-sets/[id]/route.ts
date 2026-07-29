@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 
+import { defaultFlashcardSetName } from "@/lib/flashcard-sets";
 import { prisma } from "@/lib/prisma";
 import { isPrismaErrorCode } from "@/lib/prisma-error";
 import { getSessionUserIdFromRequest } from "@/lib/session";
@@ -22,7 +23,10 @@ export async function PATCH(
   const userId = getSessionUserIdFromRequest(request);
 
   if (!userId) {
-    return Response.json({ message: "ログインしてください。" }, { status: 401 });
+    return Response.json(
+      { message: "ログインしてください。" },
+      { status: 401 },
+    );
   }
 
   const { id } = await params;
@@ -104,7 +108,10 @@ export async function DELETE(
   const userId = getSessionUserIdFromRequest(request);
 
   if (!userId) {
-    return Response.json({ message: "ログインしてください。" }, { status: 401 });
+    return Response.json(
+      { message: "ログインしてください。" },
+      { status: 401 },
+    );
   }
 
   const { id } = await params;
@@ -124,12 +131,26 @@ export async function DELETE(
   try {
     // セットに紐づく文章は onDelete: SetNull のため自動削除されない。
     // 要件どおり、文章もまとめて削除してからセットを削除する。
-    await prisma.$transaction([
-      prisma.sentence.deleteMany({
+    await prisma.$transaction(async (tx) => {
+      await tx.sentence.deleteMany({
         where: { flashcard_set_id: id, user_id: userId },
-      }),
-      prisma.flashcardSet.delete({ where: { id } }),
-    ]);
+      });
+      await tx.flashcardSet.delete({ where: { id } });
+
+      const remainingSet = await tx.flashcardSet.findFirst({
+        where: { user_id: userId },
+        select: { id: true },
+      });
+
+      if (!remainingSet) {
+        await tx.flashcardSet.create({
+          data: {
+            name: defaultFlashcardSetName,
+            user_id: userId,
+          },
+        });
+      }
+    });
 
     return Response.json({ success: true });
   } catch (error) {

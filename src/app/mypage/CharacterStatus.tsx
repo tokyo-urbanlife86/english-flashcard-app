@@ -25,7 +25,7 @@ const levelTitles: Record<number, string> = {
 };
 
 type CharacterStatusProps = {
-  /** 過去1ヶ月に暗唱した数（親が /api/characters から取得済みの値を渡す） */
+  /** 過去1ヶ月に暗唱した数（親が /api/sentence-stats から取得済みの値を渡す） */
   count: number;
 };
 

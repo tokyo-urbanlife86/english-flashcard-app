@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { useState } from "react";
 
+import { useAuthGuard } from "@/hooks/useAuthGuard";
+
 const signinSchema = z.object({
   id: z.string().trim().min(1, "IDは必須です"),
   password: z.string().min(1, "パスワードは必須です"),
@@ -14,6 +16,11 @@ type FieldErrors = Record<string, string[] | undefined>;
 
 export default function Signin() {
   const router = useRouter();
+  const { isCheckingAuth } = useAuthGuard({
+    redirectAuthenticatedTo: "/mypage",
+    redirectUnauthenticatedTo: null,
+    loadStats: false,
+  });
   const [errors, setErrors] = useState<FieldErrors>({});
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -67,12 +74,17 @@ export default function Signin() {
     }
   }
 
+  if (isCheckingAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <p className="text-sm text-slate-500">読み込み中...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 flex items-center justify-center">
-      
       <div className="w-full max-w-md bg-white rounded-3xl shadow-sm border border-slate-200 p-8 md:p-10">
-        
-
         <div className="text-center mb-10">
           <h1 className="text-2xl font-bold text-slate-800 mb-2">ようこそ</h1>
           <p className="text-sm text-slate-500">
@@ -81,12 +93,13 @@ export default function Signin() {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-          
           <div>
-            <label className="mb-1.5 block text-sm font-semibold text-slate-700 ml-1">ID</label>
-            <input 
-              type="text" 
-              name="id" 
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700 ml-1">
+              ID
+            </label>
+            <input
+              type="text"
+              name="id"
               placeholder="あなたのIDを入力"
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-sky-100 transition-all"
             />
@@ -96,10 +109,12 @@ export default function Signin() {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-semibold text-slate-700 ml-1">パスワード</label>
-            <input 
-              type="password" 
-              name="password" 
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700 ml-1">
+              パスワード
+            </label>
+            <input
+              type="password"
+              name="password"
               placeholder="パスワードを入力"
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-sky-100 transition-all"
             />
@@ -107,7 +122,6 @@ export default function Signin() {
               <p className="mt-1 text-sm text-red-500">{errors.password[0]}</p>
             )}
           </div>
-
 
           <div className="mt-2">
             {message && (
@@ -123,24 +137,23 @@ export default function Signin() {
             </button>
           </div>
 
-      
           <div className="relative my-4">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-slate-100"></div>
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-slate-400">アカウントをお持ちでない方</span>
+              <span className="bg-white px-2 text-slate-400">
+                アカウントをお持ちでない方
+              </span>
             </div>
           </div>
 
-    
           <Link
             href="/signup"
             className="block w-full rounded-2xl border border-sky-100 bg-sky-50 py-3 text-center text-sm font-bold text-sky-700 transition-colors hover:bg-sky-100"
           >
             新しくアカウントを作る
           </Link>
-
         </form>
       </div>
     </div>

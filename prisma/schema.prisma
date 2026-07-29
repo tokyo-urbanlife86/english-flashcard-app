@@ -15,32 +15,32 @@ datasource db {
 
 // 1. ユーザー情報
 model User {
-  id                 String      @id @default(uuid())
-  username           String
-  email              String      @unique
-  encrypted_password String
-  created_at         DateTime @default(now())
-  updated_at         DateTime @updatedAt
-  sentences          Sentence[]
-  flashcardSets      FlashcardSet[]
+  id            String         @id @default(uuid())
+  username      String
+  email         String         @unique
+  password_hash String
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @updatedAt
+  sentences     Sentence[]
+  flashcardSets FlashcardSet[]
 }
 
 // 2. 暗唱文
 model Sentence {
-  id          String         @id @default(uuid())
-  content     String         // 暗唱文 (NOT NULL)
-  translation String         // 日本語訳 (NOT NULL)
-  casualText  String?        // LLMが作成したカジュアル版文章
-  formalText  String?        // 　　　 　〃　フォーマル 〃
-  created_at  DateTime       @default(now())
-  updated_at  DateTime       @updatedAt
-  status_id      String      @default("2")   // 習得状況　覚えてない=2,怪しい=1,覚えた=0
-  status          SentenceStatus @relation(fields: [status_id], references: [id])
-  statusUpdated_at DateTime?  // ステータスが変更したときの時刻
-  user_id          String?
-  flashcard_set_id String?
-  user             User?         @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  flashcardSet     FlashcardSet? @relation(fields: [flashcard_set_id], references: [id], onDelete: SetNull)
+  id                String         @id @default(uuid())
+  content           String // 暗唱文 (NOT NULL)
+  translation       String // 日本語訳 (NOT NULL)
+  casualText        String? // LLMが作成したカジュアル版文章
+  formalText        String? // 　　　 　〃　フォーマル 〃
+  created_at        DateTime       @default(now())
+  updated_at        DateTime       @updatedAt
+  status_id         String         @default("2") // 習得状況　覚えてない=2,怪しい=1,覚えた=0
+  status            SentenceStatus @relation(fields: [status_id], references: [id])
+  status_updated_at DateTime? // ステータスが変更したときの時刻
+  user_id           String?
+  flashcard_set_id  String?
+  user              User?          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  flashcardSet      FlashcardSet?  @relation(fields: [flashcard_set_id], references: [id], onDelete: SetNull)
 
   @@index([user_id])
   @@index([flashcard_set_id])

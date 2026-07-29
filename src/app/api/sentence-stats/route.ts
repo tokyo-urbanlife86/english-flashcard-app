@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       where: {
         user_id: userId,
         status_id: "0",
-        statusUpdated_at: {
+        status_updated_at: {
           gte: oneMonthAgo,
         },
       },

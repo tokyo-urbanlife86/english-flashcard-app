@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { ConfirmModal } from "../mypage/components/ConfirmModal";
+
 type SentenceCard = {
   id: string;
   content: string;
@@ -15,24 +17,27 @@ type FlashcardClientProps = {
 
 type StatusValue = "0" | "1" | "2";
 
-const statusButtons: { label: string; value: StatusValue; className: string }[] =
-  [
-    {
-      label: "覚えてない",
-      value: "2",
-      className: "bg-rose-500 hover:bg-rose-600",
-    },
-    {
-      label: "怪しい",
-      value: "1",
-      className: "bg-amber-500 hover:bg-amber-600",
-    },
-    {
-      label: "覚えた",
-      value: "0",
-      className: "bg-emerald-500 hover:bg-emerald-600",
-    },
-  ];
+const statusButtons: {
+  label: string;
+  value: StatusValue;
+  className: string;
+}[] = [
+  {
+    label: "覚えてない",
+    value: "2",
+    className: "bg-rose-500 hover:bg-rose-600",
+  },
+  {
+    label: "怪しい",
+    value: "1",
+    className: "bg-amber-500 hover:bg-amber-600",
+  },
+  {
+    label: "覚えた",
+    value: "0",
+    className: "bg-emerald-500 hover:bg-emerald-600",
+  },
+];
 
 export function FlashcardClient({ sentences }: FlashcardClientProps) {
   const router = useRouter();
@@ -40,18 +45,27 @@ export function FlashcardClient({ sentences }: FlashcardClientProps) {
   const [isFlipped, setIsFlipped] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
 
   const currentSentence = sentences[currentIndex];
   const isFinished = sentences.length > 0 && currentIndex >= sentences.length;
 
   const flipCard = useCallback(() => {
-    if (!currentSentence) return;
+    if (!currentSentence || isUpdating) return;
     setIsFlipped((current) => !current);
-  }, [currentSentence]);
+  }, [currentSentence, isUpdating]);
 
   const goToMypage = useCallback(() => {
     router.push("/mypage");
   }, [router]);
+
+  const openCancelConfirm = useCallback(() => {
+    setIsCancelConfirmOpen(true);
+  }, []);
+
+  const closeCancelConfirm = useCallback(() => {
+    setIsCancelConfirmOpen(false);
+  }, []);
 
   const updateStatus = useCallback(
     async (statusValue: StatusValue) => {
@@ -74,7 +88,6 @@ export function FlashcardClient({ sentences }: FlashcardClientProps) {
           return;
         }
 
-        // Supabaseへの登録が成功した瞬間に次のカードへ進む（戻れない）
         setIsFlipped(false);
         setCurrentIndex((current) => current + 1);
       } catch {
@@ -88,7 +101,10 @@ export function FlashcardClient({ sentences }: FlashcardClientProps) {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code === "Space") {
+      // 確認ダイアログが開いている間はカードを裏返さない
+      if (isCancelConfirmOpen) return;
+
+      if (!isUpdating && event.code === "Space") {
         event.preventDefault();
         flipCard();
       }
@@ -99,7 +115,7 @@ export function FlashcardClient({ sentences }: FlashcardClientProps) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [flipCard]);
+  }, [flipCard, isCancelConfirmOpen, isUpdating]);
 
   if (sentences.length === 0) {
     return (
@@ -127,7 +143,9 @@ export function FlashcardClient({ sentences }: FlashcardClientProps) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
         <div className="w-full max-w-xl rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <h1 className="text-xl font-bold text-slate-800">お疲れさまでした！</h1>
+          <h1 className="text-xl font-bold text-slate-800">
+            お疲れさまでした！
+          </h1>
           <p className="mt-3 text-sm leading-6 text-slate-500">
             {sentences.length}枚のカードをすべて確認しました。
           </p>
@@ -145,18 +163,19 @@ export function FlashcardClient({ sentences }: FlashcardClientProps) {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
+      <button
+        type="button"
+        onClick={openCancelConfirm}
+        className="fixed right-6 top-6 z-40 rounded-lg bg-red-500 px-4 py-2 font-semibold text-white shadow-sm transition-colors hover:bg-red-600"
+      >
+        キャンセル
+      </button>
+
       <div className="w-full max-w-xl">
-        <div className="mb-4 flex items-center justify-between gap-3 text-sm text-slate-500">
+        <div className="mb-4 text-sm text-slate-500">
           <p>
             {currentIndex + 1} / {sentences.length}
           </p>
-          <button
-            type="button"
-            onClick={goToMypage}
-            className="rounded-lg bg-red-500 px-4 py-2 font-semibold text-white shadow-sm transition-colors hover:bg-red-600"
-          >
-            キャンセル
-          </button>
         </div>
 
         <p className="mb-2 text-center text-sm text-slate-500">
@@ -166,7 +185,8 @@ export function FlashcardClient({ sentences }: FlashcardClientProps) {
         <button
           type="button"
           onClick={flipCard}
-          className="group h-80 w-full [perspective:1000px]"
+          disabled={isUpdating}
+          className="group h-80 w-full [perspective:1000px] disabled:cursor-not-allowed"
           aria-label="フラッシュカードを裏返す"
         >
           <div
@@ -203,9 +223,21 @@ export function FlashcardClient({ sentences }: FlashcardClientProps) {
         </div>
 
         {errorMessage && (
-          <p className="mt-3 text-center text-sm text-red-500">{errorMessage}</p>
+          <p className="mt-3 text-center text-sm text-red-500">
+            {errorMessage}
+          </p>
         )}
       </div>
+
+      {isCancelConfirmOpen && (
+        <ConfirmModal
+          message="マイページに戻りますか？（ここまでの進捗状況は保存されません）"
+          confirmLabel="はい"
+          cancelLabel="いいえ"
+          onConfirm={goToMypage}
+          onCancel={closeCancelConfirm}
+        />
+      )}
     </main>
   );
 }

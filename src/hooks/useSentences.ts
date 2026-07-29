@@ -49,7 +49,9 @@ export function useSentences({
   const [rewriteSuggestions, setRewriteSuggestions] = useState<
     Record<string, RewriteSuggestion>
   >({});
-  const [rewriteErrors, setRewriteErrors] = useState<Record<string, string>>({});
+  const [rewriteErrors, setRewriteErrors] = useState<Record<string, string>>(
+    {},
+  );
   const [rewriteAction, setRewriteAction] = useState<{
     id: string;
     tone: RewriteTone;
@@ -382,7 +384,8 @@ export function useSentences({
     } catch {
       setRewriteErrors((current) => ({
         ...current,
-        [sentenceId]: "通信に失敗しました。時間をおいてもう一度試してください。",
+        [sentenceId]:
+          "通信に失敗しました。時間をおいてもう一度試してください。",
       }));
     } finally {
       setRewriteAction(null);
@@ -439,7 +442,8 @@ export function useSentences({
     } catch {
       setRewriteErrors((current) => ({
         ...current,
-        [sentenceId]: "通信に失敗しました。時間をおいてもう一度試してください。",
+        [sentenceId]:
+          "通信に失敗しました。時間をおいてもう一度試してください。",
       }));
     } finally {
       setSentenceActionId(null);
