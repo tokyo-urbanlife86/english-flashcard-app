@@ -166,7 +166,7 @@ export function FlashcardClient({ sentences }: FlashcardClientProps) {
       <button
         type="button"
         onClick={openCancelConfirm}
-        className="fixed right-6 top-6 z-40 rounded-lg bg-red-500 px-4 py-2 font-semibold text-white shadow-sm transition-colors hover:bg-red-600"
+        className="fixed right-6 top-6 z-40 cursor-pointer select-none rounded-lg bg-red-500 px-4 py-2 font-semibold text-white caret-transparent shadow-sm transition-colors hover:bg-red-600"
       >
         キャンセル
       </button>
@@ -231,7 +231,7 @@ export function FlashcardClient({ sentences }: FlashcardClientProps) {
 
       {isCancelConfirmOpen && (
         <ConfirmModal
-          message="マイページに戻りますか？（ここまでの進捗状況は保存されません）"
+          message="マイページに戻りますか？（ここまでの進捗状況は保存されています）"
           confirmLabel="はい"
           cancelLabel="いいえ"
           onConfirm={goToMypage}
