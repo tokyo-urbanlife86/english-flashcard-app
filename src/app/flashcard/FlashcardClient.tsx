@@ -1,192 +1,158 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { ConfirmModal } from "../mypage/components/ConfirmModal";
+import { Button } from "@/components/Button";
+import { ConfirmModal } from "@/components/ConfirmModal";
+import { STATUSES } from "@/lib/constants";
+import { fetchJson } from "@/lib/fetch-json";
+import type { StatusId } from "@/lib/schemas";
 
-type SentenceCard = {
+type Card = {
   id: string;
   content: string;
   translation: string;
 };
 
-type FlashcardClientProps = {
-  sentences: SentenceCard[];
-};
+const emptyTally: Record<StatusId, number> = { "0": 0, "1": 0, "2": 0 };
 
-type StatusValue = "0" | "1" | "2";
+/** 英文をブラウザの音声合成で読み上げる。 */
+function speak(text: string) {
+  speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "en-US";
+  speechSynthesis.speak(utterance);
+}
 
-const statusButtons: {
-  label: string;
-  value: StatusValue;
-  className: string;
-}[] = [
-  {
-    label: "覚えてない",
-    value: "2",
-    className: "bg-rose-500 hover:bg-rose-600",
-  },
-  {
-    label: "怪しい",
-    value: "1",
-    className: "bg-amber-500 hover:bg-amber-600",
-  },
-  {
-    label: "覚えた",
-    value: "0",
-    className: "bg-emerald-500 hover:bg-emerald-600",
-  },
-];
+/** カードがないとき・終わったときに表示する画面。 */
+function MessageScreen({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <main className="flex min-h-screen items-center justify-center p-6">
+      <div className="w-full max-w-xl rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
+        <h1 className="text-xl font-bold">{title}</h1>
+        <div className="mt-3 text-sm leading-6 text-slate-500">{children}</div>
+        <Link
+          href="/mypage"
+          className="mt-6 inline-block rounded-lg bg-sky-500 px-5 py-2.5 font-semibold text-white shadow-sm transition-colors hover:bg-sky-600"
+        >
+          マイページへ戻る
+        </Link>
+      </div>
+    </main>
+  );
+}
 
-export function FlashcardClient({ sentences }: FlashcardClientProps) {
+export function FlashcardClient({ sentences }: { sentences: Card[] }) {
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
+  const [isQuitConfirmOpen, setIsQuitConfirmOpen] = useState(false);
+  // 今回のセッションで付けた評価の件数
+  const [tally, setTally] = useState(emptyTally);
 
-  const currentSentence = sentences[currentIndex];
-  const isFinished = sentences.length > 0 && currentIndex >= sentences.length;
-
-  const flipCard = useCallback(() => {
-    if (!currentSentence || isUpdating) return;
-    setIsFlipped((current) => !current);
-  }, [currentSentence, isUpdating]);
-
-  const goToMypage = useCallback(() => {
-    router.push("/mypage");
-  }, [router]);
-
-  const openCancelConfirm = useCallback(() => {
-    setIsCancelConfirmOpen(true);
-  }, []);
-
-  const closeCancelConfirm = useCallback(() => {
-    setIsCancelConfirmOpen(false);
-  }, []);
-
-  const updateStatus = useCallback(
-    async (statusValue: StatusValue) => {
-      if (!currentSentence || isUpdating) return;
-
-      setIsUpdating(true);
-      setErrorMessage("");
-
-      try {
-        const response = await fetch(`/api/sentences/${currentSentence.id}`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ status_id: statusValue }),
-        });
-
-        if (!response.ok) {
-          setErrorMessage("ステータスの更新に失敗しました。");
-          return;
-        }
-
-        setIsFlipped(false);
-        setCurrentIndex((current) => current + 1);
-      } catch {
-        setErrorMessage("通信に失敗しました。");
-      } finally {
-        setIsUpdating(false);
-      }
-    },
-    [currentSentence, isUpdating],
-  );
+  const card = sentences[currentIndex];
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // 確認ダイアログが開いている間はカードを裏返さない
-      if (isCancelConfirmOpen) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.code !== "Space" || isQuitConfirmOpen || isUpdating) return;
 
-      if (!isUpdating && event.code === "Space") {
-        event.preventDefault();
-        flipCard();
-      }
-    };
+      event.preventDefault();
+      setIsFlipped((current) => !current);
+    }
 
     window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isQuitConfirmOpen, isUpdating]);
 
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [flipCard, isCancelConfirmOpen, isUpdating]);
+  async function rate(statusId: StatusId) {
+    setIsUpdating(true);
+    setErrorMessage("");
+
+    const result = await fetchJson(`/api/sentences/${card.id}`, {
+      method: "PATCH",
+      body: { statusId },
+    });
+
+    setIsUpdating(false);
+
+    if (!result.ok) {
+      setErrorMessage(result.message);
+      return;
+    }
+
+    setTally((current) => ({ ...current, [statusId]: current[statusId] + 1 }));
+    setIsFlipped(false);
+    setCurrentIndex((current) => current + 1);
+  }
+
+  function handleSpeak() {
+    if (!("speechSynthesis" in window)) {
+      setErrorMessage("このブラウザは音声読み上げに対応していません。");
+      return;
+    }
+
+    speak(card.content);
+  }
 
   if (sentences.length === 0) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-        <div className="w-full max-w-xl rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <h1 className="text-xl font-bold text-slate-800">
-            まだカードがありません
-          </h1>
-          <p className="mt-3 text-sm leading-6 text-slate-500">
-            マイページで英文と日本語訳を登録すると、ここに表示されます。
-          </p>
-          <button
-            type="button"
-            onClick={goToMypage}
-            className="mt-6 rounded-lg bg-sky-500 px-5 py-2.5 font-semibold text-white shadow-sm transition-colors hover:bg-sky-600"
-          >
-            マイページへ戻る
-          </button>
-        </div>
-      </main>
+      <MessageScreen title="カードがありません">
+        条件に合うカードがありません。マイページで英文と日本語訳を登録するか、フィルターを変えてください。
+      </MessageScreen>
     );
   }
 
-  if (isFinished) {
+  if (!card) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-        <div className="w-full max-w-xl rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <h1 className="text-xl font-bold text-slate-800">
-            お疲れさまでした！
-          </h1>
-          <p className="mt-3 text-sm leading-6 text-slate-500">
-            {sentences.length}枚のカードをすべて確認しました。
-          </p>
-          <button
-            type="button"
-            onClick={goToMypage}
-            className="mt-6 rounded-lg bg-sky-500 px-5 py-2.5 font-semibold text-white shadow-sm transition-colors hover:bg-sky-600"
-          >
-            マイページへ戻る
-          </button>
-        </div>
-      </main>
+      <MessageScreen title="お疲れさまでした！">
+        <p>{sentences.length}枚のカードをすべて確認しました。</p>
+        <ul className="mt-4 flex justify-center gap-4 font-semibold">
+          {STATUSES.map((status) => (
+            <li key={status.id}>
+              {status.label}：{tally[status.id]}枚
+            </li>
+          ))}
+        </ul>
+      </MessageScreen>
     );
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-      <button
-        type="button"
-        onClick={openCancelConfirm}
-        className="fixed right-6 top-6 z-40 cursor-pointer select-none rounded-lg bg-red-500 px-4 py-2 font-semibold text-white caret-transparent shadow-sm transition-colors hover:bg-red-600"
+    <main className="flex min-h-screen items-center justify-center p-6">
+      <Button
+        variant="danger"
+        onClick={() => setIsQuitConfirmOpen(true)}
+        className="fixed right-6 top-6 z-40"
       >
         キャンセル
-      </button>
+      </Button>
 
       <div className="w-full max-w-xl">
-        <div className="mb-4 text-sm text-slate-500">
+        <div className="mb-4 flex items-center justify-between text-sm text-slate-500">
           <p>
             {currentIndex + 1} / {sentences.length}
           </p>
+          <p>{isFlipped ? "日本語訳" : "英文"}</p>
+          <Button size="sm" variant="secondary" onClick={handleSpeak}>
+            🔊 読み上げ
+          </Button>
         </div>
-
-        <p className="mb-2 text-center text-sm text-slate-500">
-          {isFlipped ? "日本語訳" : "英文"}
-        </p>
 
         <button
           type="button"
-          onClick={flipCard}
+          onClick={() => setIsFlipped((current) => !current)}
           disabled={isUpdating}
-          className="group h-80 w-full [perspective:1000px] disabled:cursor-not-allowed"
+          className="h-80 w-full [perspective:1000px] disabled:cursor-not-allowed"
           aria-label="フラッシュカードを裏返す"
         >
           <div
@@ -195,32 +161,38 @@ export function FlashcardClient({ sentences }: FlashcardClientProps) {
             }`}
           >
             <section className="absolute inset-0 flex items-center justify-center rounded-lg bg-white p-8 text-center shadow-lg [backface-visibility:hidden]">
-              <p className="text-2xl font-semibold leading-relaxed text-slate-800">
-                {currentSentence.content}
+              <p className="text-2xl font-semibold leading-relaxed">
+                {card.content}
               </p>
             </section>
-
             <section className="absolute inset-0 flex items-center justify-center rounded-lg bg-indigo-600 p-8 text-center shadow-lg [backface-visibility:hidden] [transform:rotateY(180deg)]">
               <p className="text-2xl font-semibold leading-relaxed text-white">
-                {currentSentence.translation}
+                {card.translation}
               </p>
             </section>
           </div>
         </button>
 
-        <div className="mt-6 grid grid-cols-3 gap-3">
-          {statusButtons.map((button) => (
-            <button
-              key={button.value}
-              type="button"
-              onClick={() => updateStatus(button.value)}
-              disabled={isUpdating}
-              className={`rounded-lg px-4 py-3 font-semibold text-white shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${button.className}`}
-            >
-              {button.label}
-            </button>
-          ))}
-        </div>
+        {/* 答えを確認してから評価できるよう、裏返した後にだけボタンを出す */}
+        {isFlipped ? (
+          <div className="mt-6 grid grid-cols-3 gap-3">
+            {STATUSES.map((status) => (
+              <button
+                key={status.id}
+                type="button"
+                onClick={() => rate(status.id)}
+                disabled={isUpdating}
+                className={`rounded-lg px-4 py-3 font-semibold text-white shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${status.className}`}
+              >
+                {status.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-6 py-3 text-center text-sm text-slate-500">
+            カードをクリック、または Space キーで答えを表示
+          </p>
+        )}
 
         {errorMessage && (
           <p className="mt-3 text-center text-sm text-red-500">
@@ -229,13 +201,13 @@ export function FlashcardClient({ sentences }: FlashcardClientProps) {
         )}
       </div>
 
-      {isCancelConfirmOpen && (
+      {isQuitConfirmOpen && (
         <ConfirmModal
           message="マイページに戻りますか？（ここまでの進捗状況は保存されています）"
           confirmLabel="はい"
           cancelLabel="いいえ"
-          onConfirm={goToMypage}
-          onCancel={closeCancelConfirm}
+          onConfirm={() => router.push("/mypage")}
+          onCancel={() => setIsQuitConfirmOpen(false)}
         />
       )}
     </main>

@@ -1,153 +1,60 @@
-import { z } from "zod";
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 
-import { ensureDefaultFlashcardSet } from "@/lib/flashcard-sets";
-import { getSessionUserIdFromRequest } from "@/lib/session";
+import { errorResponse, parseBody, unauthorizedResponse } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { createSentencesSchema } from "@/lib/schemas";
+import { getCurrentUserId } from "@/lib/session";
 
-export const runtime = "nodejs";
-
-const sentenceSchema = z.object({
-  content: z
-    .string()
-    .trim()
-    .min(1, "英文を入力してください")
-    .refine((value) => value.trim().split(/\s+/).length <= 100, {
-      message: "英文は100語以内で入力してください",
-    }),
-  translation: z
-    .string()
-    .trim()
-    .min(1, "日本語訳を入力してください")
-    .max(200, "日本語訳は200文字以内で入力してください"),
-});
-
-const requestSchema = z.object({
-  setId: z.string().uuid().optional(),
-  sentences: z.array(sentenceSchema).min(1),
-});
+const sentenceSelect = {
+  id: true,
+  content: true,
+  translation: true,
+  statusId: true,
+} as const;
 
 export async function GET(request: NextRequest) {
-  const userId = getSessionUserIdFromRequest(request);
-
-  if (!userId) {
-    return Response.json(
-      { message: "ログインしてください。" },
-      { status: 401 },
-    );
-  }
+  const userId = await getCurrentUserId();
+  if (!userId) return unauthorizedResponse();
 
   const setId = request.nextUrl.searchParams.get("setId");
 
-  if (setId) {
-    const set = await prisma.flashcardSet.findFirst({
-      where: {
-        id: setId,
-        user_id: userId,
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    if (!set) {
-      return Response.json(
-        { message: "指定されたセットが見つかりません。" },
-        { status: 404 },
-      );
-    }
+  if (!setId) {
+    return errorResponse("セットを指定してください。", 400);
   }
 
   const sentences = await prisma.sentence.findMany({
-    where: {
-      user_id: userId,
-      ...(setId ? { flashcard_set_id: setId } : {}),
-    },
-    orderBy: {
-      created_at: "desc",
-    },
-    select: {
-      id: true,
-      content: true,
-      translation: true,
-      status_id: true,
-      created_at: true,
-    },
+    where: { userId, flashcardSetId: setId },
+    orderBy: { createdAt: "desc" },
+    select: sentenceSelect,
   });
 
   return Response.json({ sentences });
 }
 
-export async function POST(request: NextRequest) {
-  const userId = getSessionUserIdFromRequest(request);
+export async function POST(request: Request) {
+  const userId = await getCurrentUserId();
+  if (!userId) return unauthorizedResponse();
 
-  if (!userId) {
-    return Response.json(
-      { message: "ログインしてください。" },
-      { status: 401 },
-    );
+  const { data, error } = await parseBody(request, createSentencesSchema);
+  if (error) return error;
+
+  const set = await prisma.flashcardSet.findFirst({
+    where: { id: data.setId, userId },
+    select: { id: true },
+  });
+
+  if (!set) {
+    return errorResponse("保存先のセットが見つかりません。", 404);
   }
 
-  let body: unknown;
+  const sentences = await prisma.sentence.createManyAndReturn({
+    data: data.sentences.map((sentence) => ({
+      ...sentence,
+      userId,
+      flashcardSetId: set.id,
+    })),
+    select: sentenceSelect,
+  });
 
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json(
-      { message: "リクエストの形式が正しくありません。" },
-      { status: 400 },
-    );
-  }
-
-  const result = requestSchema.safeParse(body);
-
-  if (!result.success) {
-    return Response.json(
-      {
-        message: "入力内容を確認してください。",
-        fieldErrors: result.error.flatten(),
-      },
-      { status: 400 },
-    );
-  }
-
-  try {
-    const targetSet = result.data.setId
-      ? await prisma.flashcardSet.findFirst({
-          where: {
-            id: result.data.setId,
-            user_id: userId,
-          },
-          select: {
-            id: true,
-          },
-        })
-      : await ensureDefaultFlashcardSet(userId);
-
-    if (!targetSet) {
-      return Response.json(
-        { message: "保存先のセットが見つかりません。" },
-        { status: 404 },
-      );
-    }
-
-    const sentences = await prisma.sentence.createMany({
-      data: result.data.sentences.map((sentence) => ({
-        content: sentence.content,
-        translation: sentence.translation,
-        status_id: "2",
-        user_id: userId,
-        flashcard_set_id: targetSet.id,
-      })),
-    });
-
-    return Response.json({ count: sentences.count }, { status: 201 });
-  } catch (error) {
-    console.error(error);
-
-    return Response.json(
-      { message: "保存に失敗しました。時間をおいてもう一度試してください。" },
-      { status: 500 },
-    );
-  }
+  return Response.json({ sentences }, { status: 201 });
 }

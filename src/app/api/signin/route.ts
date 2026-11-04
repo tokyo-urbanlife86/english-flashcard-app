@@ -1,73 +1,25 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 
+import { errorResponse, parseBody } from "@/lib/api";
 import { isPasswordCorrect } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import { signinSchema } from "@/lib/schemas";
 import { setSessionCookie } from "@/lib/session";
 
-export const runtime = "nodejs";
-
-const signinSchema = z.object({
-  id: z.string().trim().min(1, "IDは必須です"),
-  password: z.string().min(1, "パスワードは必須です"),
-});
-
 export async function POST(request: Request) {
-  let body: unknown;
-
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json(
-      { message: "リクエストの形式が正しくありません。" },
-      { status: 400 },
-    );
-  }
-
-  const result = signinSchema.safeParse(body);
-
-  if (!result.success) {
-    return Response.json(
-      { fieldErrors: result.error.flatten().fieldErrors },
-      { status: 400 },
-    );
-  }
-
-  const { id, password } = result.data;
+  const { data, error } = await parseBody(request, signinSchema);
+  if (error) return error;
 
   const user = await prisma.user.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      username: true,
-      email: true,
-      password_hash: true,
-    },
+    where: { id: data.id },
+    select: { id: true, passwordHash: true },
   });
 
-  if (!user) {
-    return Response.json(
-      { message: "IDまたはパスワードが正しくありません" },
-      { status: 401 },
-    );
+  if (!user || !isPasswordCorrect(data.password, user.passwordHash)) {
+    return errorResponse("IDまたはパスワードが正しくありません", 401);
   }
 
-  const passwordIsCorrect = isPasswordCorrect(password, user.password_hash);
-
-  if (!passwordIsCorrect) {
-    return Response.json(
-      { message: "IDまたはパスワードが正しくありません" },
-      { status: 401 },
-    );
-  }
-
-  const response = NextResponse.json({
-    user: {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-    },
-  });
+  const response = NextResponse.json({ ok: true });
   setSessionCookie(response, user.id);
 
   return response;

@@ -1,112 +1,63 @@
+import { NoticeText } from "@/components/NoticeText";
 import type { useSentences } from "@/hooks/useSentences";
+import type { FlashcardSet } from "@/types/flashcard";
 
 import { EditableSetName } from "./EditableSetName";
 import { SavedSentenceItem } from "./SavedSentenceItem";
 
 type SavedSentenceListProps = {
-  selectedSetId: string;
-  selectedSetName?: string;
+  set: FlashcardSet;
+  canDeleteSet: boolean;
   onRenameSet: (name: string) => void;
   onRequestDeleteSet: () => void;
   sentences: ReturnType<typeof useSentences>;
 };
 
 export function SavedSentenceList({
-  selectedSetId,
-  selectedSetName,
+  set,
+  canDeleteSet,
   onRenameSet,
   onRequestDeleteSet,
   sentences,
 }: SavedSentenceListProps) {
-  const {
-    savedSentences,
-    isLoadingSentences,
-    sentenceListMessage,
-    sentenceActionId,
-    editingSentenceId,
-    editingRow,
-    editingErrors,
-    startEditingSentence,
-    cancelEditingSentence,
-    updateEditingRow,
-    saveSentenceEdit,
-    deleteSentence,
-    rewriteSuggestions,
-    rewriteErrors,
-    rewriteAction,
-    requestSentenceRewrite,
-    cancelRewriteSuggestion,
-    applyRewriteSuggestion,
-  } = sentences;
-
   return (
     <section className="border-t border-slate-100 pt-5 md:border-l md:border-t-0 md:pl-6 md:pt-0">
-      <div className="mb-4 flex items-center gap-3">
-        {selectedSetId ? (
-          <EditableSetName
-            name={selectedSetName ?? "選択中セット"}
-            onRename={onRenameSet}
-          />
-        ) : (
-          <h2 className="min-w-0 flex-1 truncate text-base font-bold text-slate-800">
-            選択中セット
-          </h2>
-        )}
+      <div className="mb-4 flex items-center gap-2">
+        <EditableSetName name={set.name} onRename={onRenameSet} />
         <p className="shrink-0 text-sm font-semibold text-sky-600">
-          {savedSentences.length}件
+          {set.sentenceCount}件
         </p>
-        {selectedSetId && (
-          <button
-            type="button"
-            onClick={onRequestDeleteSet}
-            className="shrink-0 rounded-lg border border-red-100 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50"
-          >
-            セット削除
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onRequestDeleteSet}
+          disabled={!canDeleteSet}
+          title={canDeleteSet ? undefined : "最後のセットは削除できません"}
+          className="shrink-0 rounded-lg border border-red-100 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          セット削除
+        </button>
       </div>
 
-      {sentenceListMessage && (
-        <p className="mb-3 text-sm text-slate-600">{sentenceListMessage}</p>
-      )}
+      <div className="mb-3">
+        <NoticeText notice={sentences.notice} />
+      </div>
 
-      {isLoadingSentences ? (
+      {sentences.isLoading ? (
         <p className="text-sm text-slate-500">読み込み中...</p>
-      ) : savedSentences.length === 0 ? (
+      ) : sentences.sentences.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm leading-6 text-slate-500">
           このセットにはまだカードがありません。
         </p>
       ) : (
         <ul className="max-h-[28rem] space-y-3 overflow-y-auto pr-1">
-          {savedSentences.map((sentence) => {
-            const rewritingTone =
-              rewriteAction?.id === sentence.id ? rewriteAction.tone : null;
-
-            return (
-              <SavedSentenceItem
-                key={sentence.id}
-                sentence={sentence}
-                isBusy={
-                  sentenceActionId === sentence.id || rewritingTone !== null
-                }
-                isEditing={editingSentenceId === sentence.id}
-                editingRow={editingRow}
-                editingErrors={editingErrors}
-                onUpdateEditingRow={updateEditingRow}
-                onSaveEdit={saveSentenceEdit}
-                onCancelEdit={cancelEditingSentence}
-                onStartEditing={startEditingSentence}
-                onDelete={deleteSentence}
-                rewriteSuggestion={rewriteSuggestions[sentence.id]}
-                rewriteError={rewriteErrors[sentence.id]}
-                isAnyRewriting={Boolean(rewriteAction)}
-                rewritingTone={rewritingTone}
-                onRequestRewrite={requestSentenceRewrite}
-                onCancelRewrite={cancelRewriteSuggestion}
-                onApplyRewrite={applyRewriteSuggestion}
-              />
-            );
-          })}
+          {sentences.sentences.map((sentence) => (
+            <SavedSentenceItem
+              key={sentence.id}
+              sentence={sentence}
+              onUpdate={sentences.updateSentence}
+              onDelete={sentences.deleteSentence}
+            />
+          ))}
         </ul>
       )}
     </section>

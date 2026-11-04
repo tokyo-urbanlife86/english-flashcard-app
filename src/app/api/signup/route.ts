@@ -1,167 +1,44 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 
-import { defaultFlashcardSetName } from "@/lib/flashcard-sets";
+import { errorResponse, parseBody } from "@/lib/api";
+import { DEFAULT_SET_NAME } from "@/lib/constants";
 import { createPasswordHash } from "@/lib/password";
-import { prisma } from "@/lib/prisma";
-import { getPrismaErrorCode, isPrismaErrorCode } from "@/lib/prisma-error";
+import { isUniqueError, prisma } from "@/lib/prisma";
+import { signupSchema } from "@/lib/schemas";
 import { setSessionCookie } from "@/lib/session";
 
-export const runtime = "nodejs";
-
-const signupSchema = z.object({
-  id: z
-    .string()
-    .trim()
-    .min(8, "IDは8文字以上で入力してください")
-    .regex(/^[a-zA-Z0-9]+$/, "IDは英数字だけで入力してください"),
-  username: z
-    .string()
-    .trim()
-    .min(1, "ユーザー名は必須です")
-    .max(15, "ユーザー名は15文字以内で入力してください"),
-  email: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .email("メールアドレスの形式が正しくありません"),
-  password: z.string().min(8, "パスワードは8文字以上でなければなりません"),
-});
-
 export async function POST(request: Request) {
-  let body: unknown;
+  const { data, error } = await parseBody(request, signupSchema);
+  if (error) return error;
 
   try {
-    body = await request.json();
-  } catch {
-    return Response.json(
-      { message: "リクエストの形式が正しくありません。" },
-      { status: 400 },
-    );
-  }
-
-  const result = signupSchema.safeParse(body);
-
-  if (!result.success) {
-    return Response.json(
-      { fieldErrors: result.error.flatten().fieldErrors },
-      { status: 400 },
-    );
-  }
-
-  const { id, username, email, password } = result.data;
-
-  try {
-    if (!process.env.DATABASE_URL) {
-      return Response.json(
-        { message: "サーバーのデータベース接続設定が不足しています。" },
-        { status: 500 },
-      );
-    }
-
-    const existingIdUser = await prisma.user.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-
-    if (existingIdUser) {
-      return Response.json(
-        { message: "このIDはすでに使われています" },
-        { status: 409 },
-      );
-    }
-
-    const existingEmailUser = await prisma.user.findFirst({
-      where: { email },
-      select: { id: true },
-    });
-
-    if (existingEmailUser) {
-      return Response.json(
-        { message: "このメールアドレスはすでに使われています" },
-        { status: 409 },
-      );
-    }
-
     const user = await prisma.user.create({
       data: {
-        id,
-        username,
-        email,
-        password_hash: createPasswordHash(password),
-        flashcardSets: {
-          create: {
-            name: defaultFlashcardSetName,
-          },
-        },
+        id: data.id,
+        username: data.username,
+        email: data.email,
+        passwordHash: createPasswordHash(data.password),
+        flashcardSets: { create: { name: DEFAULT_SET_NAME } },
       },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        created_at: true,
-      },
+      select: { id: true },
     });
 
-    const response = NextResponse.json({ user }, { status: 201 });
+    const response = NextResponse.json({ ok: true }, { status: 201 });
     setSessionCookie(response, user.id);
 
     return response;
   } catch (error) {
-    if (isPrismaErrorCode(error, "P2002")) {
-      return Response.json(
-        { message: "このIDまたはメールアドレスはすでに使われています" },
-        { status: 409 },
-      );
-    }
-
-    const prismaErrorCode = getPrismaErrorCode(error);
-
-    if (prismaErrorCode === "P1000") {
-      return Response.json(
-        {
-          message:
-            "データベース認証に失敗しました。VercelのDATABASE_URLを確認してください。",
-        },
-        { status: 500 },
-      );
-    }
-
-    if (prismaErrorCode === "P1001") {
-      return Response.json(
-        {
-          message:
-            "データベースに接続できません。VercelのDATABASE_URLはSupabaseのConnection Pooler用URLを設定してください。",
-        },
-        { status: 500 },
-      );
-    }
-
-    if (prismaErrorCode === "P1013") {
-      return Response.json(
-        {
-          message:
-            "データベースURLの形式が正しくありません。VercelのDATABASE_URLに引用符を含めず設定してください。",
-        },
-        { status: 500 },
-      );
-    }
-
-    if (prismaErrorCode === "P2021" || prismaErrorCode === "P2022") {
-      return Response.json(
-        {
-          message:
-            "データベースのテーブルまたはカラムが不足しています。Prisma migrationの適用状況を確認してください。",
-        },
-        { status: 500 },
+    if (isUniqueError(error)) {
+      return errorResponse(
+        "このIDまたはメールアドレスはすでに使われています",
+        409,
       );
     }
 
     console.error(error);
-
-    return Response.json(
-      { message: "登録に失敗しました。時間をおいてもう一度お試しください。" },
-      { status: 500 },
+    return errorResponse(
+      "登録に失敗しました。時間をおいてもう一度お試しください。",
+      500,
     );
   }
 }

@@ -1,192 +1,37 @@
-import { NextRequest } from "next/server";
-import { z } from "zod";
-
+import { errorResponse, parseBody, unauthorizedResponse } from "@/lib/api";
+import { rewriteSentence } from "@/lib/gemini";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserIdFromRequest } from "@/lib/session";
+import { rewriteSchema } from "@/lib/schemas";
+import { getCurrentUserId } from "@/lib/session";
 
-export const runtime = "nodejs";
+type Context = { params: Promise<{ id: string }> };
 
-const rewriteSchema = z.object({
-  tone: z.enum(["casual", "formal"]),
-});
+export async function POST(request: Request, { params }: Context) {
+  const userId = await getCurrentUserId();
+  if (!userId) return unauthorizedResponse();
 
-type GeminiGenerateContentResponse = {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{
-        text?: string;
-      }>;
-    };
-  }>;
-};
-
-function getGeminiApiKey() {
-  return (
-    process.env.GEMINI_API_KEY ??
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY ??
-    process.env.GOOGLE_API_KEY
-  );
-}
-
-function normalizeSuggestion(text: string) {
-  const normalized = text
-    .trim()
-    .replace(/^```[a-zA-Z]*\s*/, "")
-    .replace(/\s*```$/, "")
-    .trim();
-
-  if (
-    (normalized.startsWith('"') && normalized.endsWith('"')) ||
-    (normalized.startsWith("'") && normalized.endsWith("'"))
-  ) {
-    return normalized.slice(1, -1).trim();
-  }
-
-  return normalized;
-}
-
-function buildPrompt(content: string, tone: "casual" | "formal") {
-  const toneLabel = tone === "casual" ? "自然でカジュアル" : "丁寧でフォーマル";
-
-  return [
-    "You are an expert English writing editor.",
-    `Rewrite the following English sentence into a ${toneLabel} version.`,
-    "Keep the original meaning, fix grammar if needed, and return only one rewritten English sentence.",
-    "Do not include explanations, labels, markdown, quotation marks, or Japanese.",
-    "",
-    `Original sentence: ${content}`,
-  ].join("\n");
-}
-
-async function rewriteWithGemini(content: string, tone: "casual" | "formal") {
-  const apiKey = getGeminiApiKey();
-
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not set");
-  }
-
-  const model = process.env.GEMINI_MODEL ?? "gemini-flash-latest";
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: buildPrompt(content, tone) }],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          // gemini-flash-latest は思考型モデルで、思考に数百〜千トークン以上
-          // 消費する。上限が小さいと出力が途中で切れて（MAX_TOKENS）
-          // 文章の一部しか返らないため、全文が収まるよう十分な余裕を確保する。
-          maxOutputTokens: 4096,
-        },
-      }),
-    },
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
-    console.error("Gemini rewrite failed", response.status, errorText);
-    throw new Error("Gemini request failed");
-  }
-
-  const data = (await response.json()) as GeminiGenerateContentResponse;
-  const suggestion = normalizeSuggestion(
-    data.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text ?? "")
-      .join("") ?? "",
-  );
-
-  if (!suggestion) {
-    throw new Error("Gemini returned no suggestion");
-  }
-
-  return suggestion;
-}
-
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const userId = getSessionUserIdFromRequest(request);
-
-  if (!userId) {
-    return Response.json(
-      { message: "ログインしてください。" },
-      { status: 401 },
-    );
-  }
-
-  let body: unknown;
-
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json(
-      { message: "リクエストの形式が正しくありません。" },
-      { status: 400 },
-    );
-  }
-
-  const result = rewriteSchema.safeParse(body);
-
-  if (!result.success) {
-    return Response.json(
-      { message: "添削の種類が不正です。" },
-      { status: 400 },
-    );
-  }
+  const { data, error } = await parseBody(request, rewriteSchema);
+  if (error) return error;
 
   const { id } = await params;
   const sentence = await prisma.sentence.findFirst({
-    where: {
-      id,
-      user_id: userId,
-    },
-    select: {
-      id: true,
-      content: true,
-    },
+    where: { id, userId },
+    select: { content: true },
   });
 
   if (!sentence) {
-    return Response.json(
-      { message: "指定された暗唱文が見つかりません。" },
-      { status: 404 },
-    );
+    return errorResponse("指定された暗唱文が見つかりません。", 404);
   }
 
   try {
-    const suggestion = await rewriteWithGemini(
-      sentence.content,
-      result.data.tone,
-    );
+    const suggestion = await rewriteSentence(sentence.content, data.tone);
 
-    return Response.json({
-      suggestion,
-      tone: result.data.tone,
-    });
+    return Response.json({ suggestion });
   } catch (error) {
     console.error(error);
-
-    const isMissingKey =
-      error instanceof Error && error.message === "GEMINI_API_KEY is not set";
-
-    return Response.json(
-      {
-        message: isMissingKey
-          ? "GEMINI_API_KEYが設定されていません。"
-          : "AI添削に失敗しました。時間をおいてもう一度試してください。",
-      },
-      { status: isMissingKey ? 500 : 502 },
+    return errorResponse(
+      "AI添削に失敗しました。時間をおいてもう一度試してください。",
+      502,
     );
   }
 }

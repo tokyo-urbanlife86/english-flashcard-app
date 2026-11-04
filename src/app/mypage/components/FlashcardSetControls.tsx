@@ -1,90 +1,78 @@
-import type { FlashcardSet, SetFieldErrors } from "@/types/flashcard";
+"use client";
+
+import { useState } from "react";
+
+import { Button } from "@/components/Button";
+import { NoticeText } from "@/components/NoticeText";
+import type { FlashcardSet, Notice } from "@/types/flashcard";
+
+import { SetSelect } from "./SetSelect";
 
 type FlashcardSetControlsProps = {
   sets: FlashcardSet[];
   selectedSetId: string;
   onSelectSet: (setId: string) => void;
-  isLoadingSets: boolean;
-  newSetName: string;
-  onChangeNewSetName: (value: string) => void;
-  onCreateSet: () => void;
-  isCreatingSet: boolean;
-  setErrors: SetFieldErrors;
-  message: string;
+  onCreateSet: (name: string) => Promise<boolean>;
+  notice: Notice;
 };
 
 export function FlashcardSetControls({
   sets,
   selectedSetId,
   onSelectSet,
-  isLoadingSets,
-  newSetName,
-  onChangeNewSetName,
   onCreateSet,
-  isCreatingSet,
-  setErrors,
-  message,
+  notice,
 }: FlashcardSetControlsProps) {
+  const [newSetName, setNewSetName] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+
+  async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsCreating(true);
+
+    if (await onCreateSet(newSetName)) {
+      setNewSetName("");
+    }
+
+    setIsCreating(false);
+  }
+
   return (
     <div className="border-b border-slate-100 pb-5">
       <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <label
-            htmlFor="save-set"
-            className="mb-1 block text-sm font-semibold text-slate-700"
-          >
-            保存先セット
-          </label>
-          <select
-            id="save-set"
-            value={selectedSetId}
-            onChange={(event) => onSelectSet(event.target.value)}
-            disabled={isLoadingSets}
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-slate-800 transition-colors focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-sky-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-          >
-            <option value="" disabled>
-              {isLoadingSets ? "読み込み中..." : "セットがありません"}
-            </option>
-            {sets.map((set) => (
-              <option key={set.id} value={set.id}>
-                {set.name}（{set.sentenceCount}件）
-              </option>
-            ))}
-          </select>
-        </div>
+        <SetSelect
+          label="保存先セット"
+          sets={sets}
+          value={selectedSetId}
+          onChange={onSelectSet}
+        />
 
-        <div>
+        <form onSubmit={handleCreate}>
           <label
             htmlFor="new-set-name"
-            className="mb-1 block text-sm font-semibold text-slate-700"
+            className="mb-1.5 block text-sm font-semibold text-slate-700"
           >
             新しいセット
           </label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <input
               id="new-set-name"
-              type="text"
               value={newSetName}
-              onChange={(event) => onChangeNewSetName(event.target.value)}
+              onChange={(event) => setNewSetName(event.target.value)}
               placeholder="例: 旅行英会話"
-              className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-sky-100"
+              maxLength={30}
+              className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 placeholder:text-slate-400 focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-sky-100"
             />
-            <button
-              type="button"
-              onClick={onCreateSet}
-              disabled={isCreatingSet}
-              className="rounded-lg bg-sky-500 px-4 py-2 font-semibold text-white shadow-sm transition-colors hover:bg-sky-600 disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              {isCreatingSet ? "作成中..." : "セット作成"}
-            </button>
+            <Button type="submit" disabled={isCreating}>
+              {isCreating ? "作成中..." : "セット作成"}
+            </Button>
           </div>
-          {setErrors.name?.[0] && (
-            <p className="mt-1 text-sm text-red-500">{setErrors.name[0]}</p>
-          )}
-        </div>
+        </form>
       </div>
 
-      {message && <p className="mt-3 text-sm text-slate-600">{message}</p>}
+      <div className="mt-3">
+        <NoticeText notice={notice} />
+      </div>
     </div>
   );
 }

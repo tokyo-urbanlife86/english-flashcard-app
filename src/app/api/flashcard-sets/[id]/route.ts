@@ -1,164 +1,63 @@
-import { NextRequest } from "next/server";
-import { z } from "zod";
+import { errorResponse, parseBody, unauthorizedResponse } from "@/lib/api";
+import { isNotFoundError, isUniqueError, prisma } from "@/lib/prisma";
+import { setNameSchema } from "@/lib/schemas";
+import { getCurrentUserId } from "@/lib/session";
 
-import { defaultFlashcardSetName } from "@/lib/flashcard-sets";
-import { prisma } from "@/lib/prisma";
-import { isPrismaErrorCode } from "@/lib/prisma-error";
-import { getSessionUserIdFromRequest } from "@/lib/session";
+type Context = { params: Promise<{ id: string }> };
 
-export const runtime = "nodejs";
+export async function PATCH(request: Request, { params }: Context) {
+  const userId = await getCurrentUserId();
+  if (!userId) return unauthorizedResponse();
 
-const renameSetSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, "セット名を入力してください")
-    .max(30, "セット名は30文字以内で入力してください"),
-});
-
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const userId = getSessionUserIdFromRequest(request);
-
-  if (!userId) {
-    return Response.json(
-      { message: "ログインしてください。" },
-      { status: 401 },
-    );
-  }
+  const { data, error } = await parseBody(request, setNameSchema);
+  if (error) return error;
 
   const { id } = await params;
-
-  let body: unknown;
-
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json(
-      { message: "リクエストの形式が正しくありません。" },
-      { status: 400 },
-    );
-  }
-
-  const result = renameSetSchema.safeParse(body);
-
-  if (!result.success) {
-    return Response.json(
-      {
-        message: "入力内容を確認してください。",
-        fieldErrors: result.error.flatten().fieldErrors,
-      },
-      { status: 400 },
-    );
-  }
-
-  const existingSet = await prisma.flashcardSet.findFirst({
-    where: { id, user_id: userId },
-    select: { id: true },
-  });
-
-  if (!existingSet) {
-    return Response.json(
-      { message: "指定されたセットが見つかりません。" },
-      { status: 404 },
-    );
-  }
 
   try {
     const set = await prisma.flashcardSet.update({
-      where: { id },
-      data: { name: result.data.name },
-      select: {
-        id: true,
-        name: true,
-        _count: { select: { sentences: true } },
-      },
+      where: { id, userId },
+      data: { name: data.name },
+      select: { id: true, name: true },
     });
 
-    return Response.json({
-      set: {
-        id: set.id,
-        name: set.name,
-        sentenceCount: set._count.sentences,
-      },
-    });
+    return Response.json({ set });
   } catch (error) {
-    if (isPrismaErrorCode(error, "P2002")) {
-      return Response.json(
-        { fieldErrors: { name: ["同じ名前のセットがすでにあります"] } },
-        { status: 409 },
-      );
+    if (isNotFoundError(error)) {
+      return errorResponse("指定されたセットが見つかりません。", 404);
+    }
+
+    if (isUniqueError(error)) {
+      return errorResponse("同じ名前のセットがすでにあります", 409);
     }
 
     console.error(error);
-
-    return Response.json(
-      { message: "セット名の変更に失敗しました。" },
-      { status: 500 },
-    );
+    return errorResponse("セット名の変更に失敗しました。", 500);
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const userId = getSessionUserIdFromRequest(request);
-
-  if (!userId) {
-    return Response.json(
-      { message: "ログインしてください。" },
-      { status: 401 },
-    );
-  }
+export async function DELETE(_request: Request, { params }: Context) {
+  const userId = await getCurrentUserId();
+  if (!userId) return unauthorizedResponse();
 
   const { id } = await params;
+  const setCount = await prisma.flashcardSet.count({ where: { userId } });
 
-  const existingSet = await prisma.flashcardSet.findFirst({
-    where: { id, user_id: userId },
-    select: { id: true },
-  });
-
-  if (!existingSet) {
-    return Response.json(
-      { message: "指定されたセットが見つかりません。" },
-      { status: 404 },
-    );
+  if (setCount <= 1) {
+    return errorResponse("最後のセットは削除できません。", 400);
   }
 
   try {
-    // セットに紐づく文章は onDelete: SetNull のため自動削除されない。
-    // 要件どおり、文章もまとめて削除してからセットを削除する。
-    await prisma.$transaction(async (tx) => {
-      await tx.sentence.deleteMany({
-        where: { flashcard_set_id: id, user_id: userId },
-      });
-      await tx.flashcardSet.delete({ where: { id } });
+    // セット内の文章は onDelete: Cascade で一緒に削除される
+    await prisma.flashcardSet.delete({ where: { id, userId } });
 
-      const remainingSet = await tx.flashcardSet.findFirst({
-        where: { user_id: userId },
-        select: { id: true },
-      });
-
-      if (!remainingSet) {
-        await tx.flashcardSet.create({
-          data: {
-            name: defaultFlashcardSetName,
-            user_id: userId,
-          },
-        });
-      }
-    });
-
-    return Response.json({ success: true });
+    return Response.json({ ok: true });
   } catch (error) {
-    console.error(error);
+    if (isNotFoundError(error)) {
+      return errorResponse("指定されたセットが見つかりません。", 404);
+    }
 
-    return Response.json(
-      { message: "セットの削除に失敗しました。" },
-      { status: 500 },
-    );
+    console.error(error);
+    return errorResponse("セットの削除に失敗しました。", 500);
   }
 }

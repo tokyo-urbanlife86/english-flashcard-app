@@ -1,166 +1,51 @@
-import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-
+import { errorResponse, parseBody, unauthorizedResponse } from "@/lib/api";
 import { createPasswordHash, isPasswordCorrect } from "@/lib/password";
-import { prisma } from "@/lib/prisma";
-import { isPrismaErrorCode } from "@/lib/prisma-error";
-import { getSessionUserIdFromRequest } from "@/lib/session";
+import { isUniqueError, prisma } from "@/lib/prisma";
+import { updateMeSchema } from "@/lib/schemas";
+import { getCurrentUserId } from "@/lib/session";
 
-export const runtime = "nodejs";
+export async function PATCH(request: Request) {
+  const userId = await getCurrentUserId();
+  if (!userId) return unauthorizedResponse();
 
-const updateMyInfoSchema = z
-  .object({
-    username: z.string().trim().min(1, "ユーザー名は必須です"),
-    email: z
-      .string()
-      .trim()
-      .toLowerCase()
-      .email("メールアドレスの形式が正しくありません"),
-    currentPassword: z.string().optional().default(""),
-    newPassword: z.string().optional().default(""),
-  })
-  .superRefine((value, context) => {
-    if (!value.newPassword) return;
+  const { data, error } = await parseBody(request, updateMeSchema);
+  if (error) return error;
 
-    if (value.newPassword.length < 8) {
-      context.addIssue({
-        code: "custom",
-        path: ["newPassword"],
-        message: "新しいパスワードは8文字以上で入力してください",
+  const { username, email, currentPassword, newPassword } = data;
+
+  if (newPassword) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true },
+    });
+
+    if (!user || !isPasswordCorrect(currentPassword, user.passwordHash)) {
+      return errorResponse("入力内容を確認してください。", 400, {
+        currentPassword: ["現在のパスワードが正しくありません"],
       });
     }
-
-    if (!value.currentPassword) {
-      context.addIssue({
-        code: "custom",
-        path: ["currentPassword"],
-        message: "パスワードを変更するには現在のパスワードを入力してください",
-      });
-    }
-  });
-
-export async function GET(request: NextRequest) {
-  const userId = getSessionUserIdFromRequest(request);
-
-  if (!userId) {
-    return NextResponse.json(
-      { message: "ログインしてください。" },
-      { status: 401 },
-    );
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      username: true,
-      email: true,
-    },
-  });
-
-  if (!user) {
-    return NextResponse.json(
-      { message: "ユーザーが見つかりません。" },
-      { status: 404 },
-    );
-  }
-
-  return NextResponse.json({ user });
-}
-
-export async function PATCH(request: NextRequest) {
-  const userId = getSessionUserIdFromRequest(request);
-
-  if (!userId) {
-    return NextResponse.json(
-      { message: "ログインしてください。" },
-      { status: 401 },
-    );
-  }
-
-  let body: unknown;
-
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json(
-      { message: "リクエストの形式が正しくありません。" },
-      { status: 400 },
-    );
-  }
-
-  const result = updateMyInfoSchema.safeParse(body);
-
-  if (!result.success) {
-    return NextResponse.json(
-      { fieldErrors: result.error.flatten().fieldErrors },
-      { status: 400 },
-    );
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      password_hash: true,
-    },
-  });
-
-  if (!user) {
-    return NextResponse.json(
-      { message: "ユーザーが見つかりません。" },
-      { status: 404 },
-    );
-  }
-
-  const { username, email, currentPassword, newPassword } = result.data;
-
-  if (newPassword && !isPasswordCorrect(currentPassword, user.password_hash)) {
-    return NextResponse.json(
-      {
-        fieldErrors: {
-          currentPassword: ["現在のパスワードが正しくありません"],
-        },
-      },
-      { status: 400 },
-    );
   }
 
   try {
-    const updatedUser = await prisma.user.update({
+    const user = await prisma.user.update({
       where: { id: userId },
       data: {
         username,
         email,
-        ...(newPassword
-          ? { password_hash: createPasswordHash(newPassword) }
-          : {}),
+        ...(newPassword && { passwordHash: createPasswordHash(newPassword) }),
       },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-      },
+      select: { id: true, username: true, email: true },
     });
 
-    return NextResponse.json({ user: updatedUser });
+    return Response.json({ user });
   } catch (error) {
-    if (isPrismaErrorCode(error, "P2002")) {
-      return NextResponse.json(
-        {
-          fieldErrors: {
-            email: ["このメールアドレスはすでに使われています"],
-          },
-        },
-        { status: 409 },
-      );
+    if (isUniqueError(error)) {
+      return errorResponse("入力内容を確認してください。", 409, {
+        email: ["このメールアドレスはすでに使われています"],
+      });
     }
 
     console.error(error);
-
-    return NextResponse.json(
-      { message: "ユーザー情報の更新に失敗しました。" },
-      { status: 500 },
-    );
+    return errorResponse("ユーザー情報の更新に失敗しました。", 500);
   }
 }

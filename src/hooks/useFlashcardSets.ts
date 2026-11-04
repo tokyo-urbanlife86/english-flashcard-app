@@ -1,225 +1,112 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 
-import { setSchema } from "@/lib/flashcard-schemas";
-import type { FlashcardSet, SetFieldErrors } from "@/types/flashcard";
+import { fetchJson } from "@/lib/fetch-json";
+import { setNameSchema } from "@/lib/schemas";
+import type { FlashcardSet, Notice } from "@/types/flashcard";
 
-/**
- * フラッシュカードのセット一覧の取得・選択・作成を扱う。
- * @param enabled 認証確認が済んでから読み込みを開始するためのフラグ。
- */
-export function useFlashcardSets(enabled: boolean) {
-  const router = useRouter();
-  const [sets, setSets] = useState<FlashcardSet[]>([]);
-  const [selectedSetId, setSelectedSetId] = useState("");
-  const [isLoadingSets, setIsLoadingSets] = useState(false);
-  const [newSetName, setNewSetName] = useState("");
-  const [setErrors, setSetErrors] = useState<SetFieldErrors>({});
-  const [isCreatingSet, setIsCreatingSet] = useState(false);
-  const [message, setMessage] = useState("");
+/** セット一覧の選択・作成・名前変更・削除を扱う。初期データはサーバーから受け取る。 */
+export function useFlashcardSets(initialSets: FlashcardSet[]) {
+  const [sets, setSets] = useState(initialSets);
+  const [selectedSetId, setSelectedSetId] = useState(initialSets[0]?.id ?? "");
+  const [notice, setNotice] = useState<Notice>(null);
 
-  const loadSets = useCallback(
-    async (preferredSetId?: string) => {
-      setIsLoadingSets(true);
-      setMessage("");
+  const selectedSet = sets.find((set) => set.id === selectedSetId);
 
-      try {
-        const response = await fetch("/api/flashcard-sets");
-        const data = await response.json();
+  function showError(text: string) {
+    setNotice({ text, isError: true });
+  }
 
-        if (!response.ok) {
-          if (response.status === 401) {
-            router.replace("/signin");
-            return;
-          }
+  async function createSet(name: string) {
+    const parsed = setNameSchema.safeParse({ name });
 
-          setMessage(data.message ?? "セットの読み込みに失敗しました。");
-          return;
-        }
+    if (!parsed.success) {
+      showError(parsed.error.issues[0].message);
+      return false;
+    }
 
-        const nextSets: FlashcardSet[] = Array.isArray(data.sets)
-          ? data.sets
-          : [];
+    const result = await fetchJson<{ set: FlashcardSet }>(
+      "/api/flashcard-sets",
+      { method: "POST", body: parsed.data },
+    );
 
-        setSets(nextSets);
-        setSelectedSetId((current) => {
-          if (
-            preferredSetId &&
-            nextSets.some((set) => set.id === preferredSetId)
-          ) {
-            return preferredSetId;
-          }
+    if (!result.ok) {
+      showError(result.fieldErrors.name?.[0] ?? result.message);
+      return false;
+    }
 
-          if (current && nextSets.some((set) => set.id === current)) {
-            return current;
-          }
+    setSets((current) => [...current, result.data.set]);
+    setSelectedSetId(result.data.set.id);
+    setNotice({ text: "セットを作成しました。", isError: false });
+    return true;
+  }
 
-          return nextSets[0]?.id ?? "";
-        });
-      } catch {
-        setMessage("セットの読み込みに失敗しました。");
-      } finally {
-        setIsLoadingSets(false);
-      }
-    },
-    [router],
-  );
+  async function renameSet(setId: string, name: string) {
+    const parsed = setNameSchema.safeParse({ name });
+    const target = sets.find((set) => set.id === setId);
 
-  useEffect(() => {
-    if (!enabled) return;
-
-    loadSets();
-  }, [enabled, loadSets]);
-
-  const renameSet = useCallback(
-    async (setId: string, name: string) => {
-      const trimmedName = name.trim();
-      const target = sets.find((set) => set.id === setId);
-
-      // 変更なし・空文字なら何もしない
-      if (!trimmedName || (target && target.name === trimmedName)) {
-        return;
-      }
-
-      setMessage("");
-
-      // 先に楽観的更新（ブラー保存の体感を良くする）
-      setSets((current) =>
-        current.map((set) =>
-          set.id === setId ? { ...set, name: trimmedName } : set,
-        ),
-      );
-
-      try {
-        const response = await fetch(`/api/flashcard-sets/${setId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: trimmedName }),
-        });
-        const data = await response.json();
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            router.replace("/signin");
-            return;
-          }
-
-          setMessage(
-            data.fieldErrors?.name?.[0] ??
-              data.message ??
-              "セット名の変更に失敗しました。",
-          );
-          // 失敗したのでサーバーの状態に戻す
-          await loadSets(setId);
-          return;
-        }
-
-        setMessage("セット名を変更しました。");
-      } catch {
-        setMessage("通信に失敗しました。時間をおいてもう一度試してください。");
-        await loadSets(setId);
-      }
-    },
-    [loadSets, router, sets],
-  );
-
-  const deleteSet = useCallback(
-    async (setId: string) => {
-      setMessage("");
-
-      try {
-        const response = await fetch(`/api/flashcard-sets/${setId}`, {
-          method: "DELETE",
-        });
-        const data = await response.json().catch(() => ({}));
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            router.replace("/signin");
-            return;
-          }
-
-          setMessage(data.message ?? "セットの削除に失敗しました。");
-          return;
-        }
-
-        // 削除したセットが選択中なら選択を外す（loadSetsが先頭に付け替える）
-        setSelectedSetId((current) => (current === setId ? "" : current));
-        await loadSets();
-        setMessage("セットを削除しました。");
-      } catch {
-        setMessage("通信に失敗しました。時間をおいてもう一度試してください。");
-      }
-    },
-    [loadSets, router],
-  );
-
-  const createSet = useCallback(async () => {
-    setMessage("");
-    setSetErrors({});
-
-    const result = setSchema.safeParse({ name: newSetName });
-
-    if (!result.success) {
-      setSetErrors(result.error.flatten().fieldErrors);
+    if (!parsed.success) {
+      showError(parsed.error.issues[0].message);
       return;
     }
 
-    setIsCreatingSet(true);
+    if (!target || target.name === parsed.data.name) return;
 
-    try {
-      const response = await fetch("/api/flashcard-sets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(result.data),
-      });
-      const data = await response.json();
+    const result = await fetchJson(`/api/flashcard-sets/${setId}`, {
+      method: "PATCH",
+      body: parsed.data,
+    });
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          router.replace("/signin");
-          return;
-        }
-
-        if (data.fieldErrors) {
-          setSetErrors(data.fieldErrors);
-        }
-
-        setMessage(data.message ?? "セットの作成に失敗しました。");
-        return;
-      }
-
-      setNewSetName("");
-      await loadSets(data.set?.id);
-      setMessage("セットを作成しました。");
-    } catch {
-      setMessage(
-        "セットの作成に失敗しました。時間をおいてもう一度試してください。",
-      );
-    } finally {
-      setIsCreatingSet(false);
+    if (!result.ok) {
+      showError(result.message);
+      return;
     }
-  }, [loadSets, newSetName, router]);
 
-  const selectedSet = sets.find((set) => set.id === selectedSetId);
+    setSets((current) =>
+      current.map((set) =>
+        set.id === setId ? { ...set, name: parsed.data.name } : set,
+      ),
+    );
+    setNotice({ text: "セット名を変更しました。", isError: false });
+  }
+
+  async function deleteSet(setId: string) {
+    const result = await fetchJson(`/api/flashcard-sets/${setId}`, {
+      method: "DELETE",
+    });
+
+    if (!result.ok) {
+      showError(result.message);
+      return;
+    }
+
+    const remainingSets = sets.filter((set) => set.id !== setId);
+    setSets(remainingSets);
+    setSelectedSetId(remainingSets[0]?.id ?? "");
+    setNotice({ text: "セットを削除しました。", isError: false });
+  }
+
+  /** 文章の追加・削除に合わせて、セットのカード数を更新する。 */
+  function changeSentenceCount(setId: string, diff: number) {
+    setSets((current) =>
+      current.map((set) =>
+        set.id === setId
+          ? { ...set, sentenceCount: set.sentenceCount + diff }
+          : set,
+      ),
+    );
+  }
 
   return {
     sets,
     selectedSet,
     selectedSetId,
     setSelectedSetId,
-    isLoadingSets,
-    newSetName,
-    setNewSetName,
-    setErrors,
-    setSetErrors,
-    message,
-    isCreatingSet,
+    notice,
     createSet,
     renameSet,
     deleteSet,
-    loadSets,
+    changeSentenceCount,
   };
 }

@@ -1,61 +1,48 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
-import { sessionCookieName, verifySessionToken } from "@/lib/session";
+import { flashcardQuerySchema } from "@/lib/schemas";
+import { getCurrentUserId } from "@/lib/session";
 
 import { FlashcardClient } from "./FlashcardClient";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 type FlashcardPageProps = {
-  searchParams: Promise<{
-    setId?: string;
-    status?: string;
-    sort?: string;
-  }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 };
 
-export default async function Flashcard({ searchParams }: FlashcardPageProps) {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(sessionCookieName)?.value;
-  const session = token ? verifySessionToken(token) : null;
+/** 配列をランダムに並べ替える（Fisher–Yates）。 */
+function shuffle<T>(items: T[]) {
+  const result = [...items];
 
-  if (!session) {
-    redirect("/signin");
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
   }
 
-  const params = await searchParams;
-  const where: {
-    user_id: string;
-    flashcard_set_id?: string;
-    status_id?: "0" | "1" | "2";
-  } = {
-    user_id: session.userId,
-  };
+  return result;
+}
 
-  if (params.setId) {
-    where.flashcard_set_id = params.setId;
-  }
+export default async function FlashcardPage({
+  searchParams,
+}: FlashcardPageProps) {
+  const userId = await getCurrentUserId();
+  if (!userId) redirect("/signin");
 
-  if (params.status === "0" || params.status === "1" || params.status === "2") {
-    where.status_id = params.status;
-  }
-
-  const orderBy: { created_at: "asc" | "desc" } = {
-    created_at: params.sort === "oldest" ? "asc" : "desc",
-  };
+  const query = flashcardQuerySchema.parse(await searchParams);
 
   const sentences = await prisma.sentence.findMany({
-    where,
-    orderBy,
-    select: {
-      id: true,
-      content: true,
-      translation: true,
+    where: {
+      userId,
+      flashcardSetId: query.setId,
+      statusId: query.status,
     },
+    orderBy: { createdAt: query.sort === "oldest" ? "asc" : "desc" },
+    select: { id: true, content: true, translation: true },
   });
 
-  return <FlashcardClient sentences={sentences} />;
+  return (
+    <FlashcardClient
+      sentences={query.sort === "random" ? shuffle(sentences) : sentences}
+    />
+  );
 }
