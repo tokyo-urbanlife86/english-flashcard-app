@@ -10,7 +10,7 @@
 
 ## URL
 
-https://portfolio-r8j7kwo50-gravityhorse86-2226s-projects.vercel.app/signin
+[https://portfolio-r8j7kwo50-gravityhorse86-2226s-projects.vercel.app/signin](https://portfolio-nf5n1rlw7-gravityhorse86-2226s-projects.vercel.app/signin)
 
 ## デモアカウント
 
@@ -49,6 +49,10 @@ https://portfolio-r8j7kwo50-gravityhorse86-2226s-projects.vercel.app/signin
 ### マイページ
 
 <img width="613" height="409" alt="image" src="https://github.com/user-attachments/assets/5010d0da-ef99-4f27-a766-65cedeeac7b3" />
+
+#### Gemini API を用いて、文をワンタッチでカジュアル/フォーマルなものへ添削(「カジュアルに」を押した例)
+
+<img width="287" height="248" alt="Screenshot 2026-07-29 220231" src="https://github.com/user-attachments/assets/4a99dd87-828a-4d87-b09f-2f5cb8a8abbd" />
 
 #### キャラクター進化の例(落ち武者→堅牢な戦士）
 
