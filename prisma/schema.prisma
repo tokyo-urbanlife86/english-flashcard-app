@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,37 +8,36 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// 1. ユーザー情報
+// コード上は camelCase、DB の列名は既存の snake_case のまま（@map）。
+
 model User {
   id            String         @id @default(uuid())
   username      String
   email         String         @unique
-  password_hash String
-  created_at    DateTime       @default(now())
-  updated_at    DateTime       @updatedAt
+  passwordHash  String         @map("password_hash")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
   sentences     Sentence[]
   flashcardSets FlashcardSet[]
 }
 
-// 2. 暗唱文
+// 暗唱文
 model Sentence {
-  id                String         @id @default(uuid())
-  content           String // 暗唱文 (NOT NULL)
-  translation       String // 日本語訳 (NOT NULL)
-  casualText        String? // LLMが作成したカジュアル版文章
-  formalText        String? // 　　　 　〃　フォーマル 〃
-  created_at        DateTime       @default(now())
-  updated_at        DateTime       @updatedAt
-  status_id         String         @default("2") // 習得状況　覚えてない=2,怪しい=1,覚えた=0
-  status            SentenceStatus @relation(fields: [status_id], references: [id])
-  status_updated_at DateTime? // ステータスが変更したときの時刻
-  user_id           String?
-  flashcard_set_id  String?
-  user              User?          @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  flashcardSet      FlashcardSet?  @relation(fields: [flashcard_set_id], references: [id], onDelete: SetNull)
+  id              String         @id @default(uuid())
+  content         String // 英文
+  translation     String // 日本語訳
+  statusId        String         @default("2") @map("status_id") // 覚えた=0, 怪しい=1, 覚えてない=2
+  statusUpdatedAt DateTime?      @map("status_updated_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  userId          String         @map("user_id")
+  flashcardSetId  String         @map("flashcard_set_id")
+  status          SentenceStatus @relation(fields: [statusId], references: [id])
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  flashcardSet    FlashcardSet   @relation(fields: [flashcardSetId], references: [id], onDelete: Cascade)
 
-  @@index([user_id])
-  @@index([flashcard_set_id])
+  @@index([userId])
+  @@index([flashcardSetId])
 }
 
 model SentenceStatus {
@@ -53,14 +47,14 @@ model SentenceStatus {
 }
 
 model FlashcardSet {
-  id         String     @id @default(uuid())
-  name       String
-  user_id    String
-  created_at DateTime   @default(now())
-  updated_at DateTime   @updatedAt
-  user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  sentences  Sentence[]
+  id        String     @id @default(uuid())
+  name      String
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  userId    String     @map("user_id")
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sentences Sentence[]
 
-  @@unique([user_id, name])
-  @@index([user_id])
+  @@unique([userId, name])
+  @@index([userId])
 }
