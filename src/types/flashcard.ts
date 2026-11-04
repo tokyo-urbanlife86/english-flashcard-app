@@ -1,3 +1,7 @@
+import type { StatusId } from "@/lib/schemas";
+
+// API・サーバーコンポーネントから受け取るデータの型。入力の型は lib/schemas.ts の z.infer を使う。
+
 export type UserInfo = {
   id: string;
   username: string;
@@ -9,13 +13,6 @@ export type StudyStats = {
   totalCount: number;
 };
 
-export type SentenceRow = {
-  content: string;
-  translation: string;
-};
-
-export type SentenceStatusId = "0" | "1" | "2";
-
 export type FlashcardSet = {
   id: string;
   name: string;
@@ -26,16 +23,8 @@ export type SavedSentence = {
   id: string;
   content: string;
   translation: string;
-  status_id: SentenceStatusId;
-  created_at: string;
+  statusId: StatusId;
 };
 
-export type RewriteTone = "casual" | "formal";
-
-export type RewriteSuggestion = {
-  tone: RewriteTone;
-  text: string;
-};
-
-export type SentenceRowErrors = Partial<Record<keyof SentenceRow, string>>;
-export type SetFieldErrors = Partial<Record<"name", string[]>>;
+/** 画面に表示するメッセージ。isError で色を変える。 */
+export type Notice = { text: string; isError: boolean } | null;

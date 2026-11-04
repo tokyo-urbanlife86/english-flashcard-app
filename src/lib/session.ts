@@ -1,27 +1,22 @@
 import { createHmac, timingSafeEqual } from "crypto";
 
-import type { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import type { NextResponse } from "next/server";
 
 export const sessionCookieName = "pf_session";
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
 
-function getSessionSecret() {
-  const secret = process.env.AUTH_SECRET ?? process.env.DATABASE_URL;
+function sign(value: string) {
+  const secret = process.env.AUTH_SECRET;
 
-  if (!secret && process.env.NODE_ENV === "production") {
+  if (!secret) {
     throw new Error("AUTH_SECRET is not set");
   }
 
-  return secret ?? "dev-session-secret";
+  return createHmac("sha256", secret).update(value).digest("base64url");
 }
 
-function sign(value: string) {
-  return createHmac("sha256", getSessionSecret())
-    .update(value)
-    .digest("base64url");
-}
-
-export function createSessionToken(userId: string) {
+function createSessionToken(userId: string) {
   const payload = {
     userId,
     expiresAt: Date.now() + sessionMaxAgeSeconds * 1000,
@@ -33,20 +28,20 @@ export function createSessionToken(userId: string) {
   return `${encodedPayload}.${sign(encodedPayload)}`;
 }
 
-export function verifySessionToken(token: string) {
-  const [encodedPayload, signature] = token.split(".");
+/** トークンが正しく期限内ならユーザーIDを返す。それ以外は null。 */
+export function verifySessionToken(token: string | undefined) {
+  const [encodedPayload, signature] = token?.split(".") ?? [];
 
   if (!encodedPayload || !signature) {
     return null;
   }
 
-  const expectedSignature = sign(encodedPayload);
   const signatureBuffer = Buffer.from(signature);
-  const expectedSignatureBuffer = Buffer.from(expectedSignature);
+  const expectedBuffer = Buffer.from(sign(encodedPayload));
 
   if (
-    signatureBuffer.length !== expectedSignatureBuffer.length ||
-    !timingSafeEqual(signatureBuffer, expectedSignatureBuffer)
+    signatureBuffer.length !== expectedBuffer.length ||
+    !timingSafeEqual(signatureBuffer, expectedBuffer)
   ) {
     return null;
   }
@@ -54,55 +49,41 @@ export function verifySessionToken(token: string) {
   try {
     const payload = JSON.parse(
       Buffer.from(encodedPayload, "base64url").toString("utf8"),
-    ) as { userId?: unknown; expiresAt?: unknown };
+    );
 
-    if (typeof payload.userId !== "string") {
+    if (typeof payload.userId !== "string" || payload.expiresAt < Date.now()) {
       return null;
     }
 
-    if (
-      typeof payload.expiresAt !== "number" ||
-      payload.expiresAt < Date.now()
-    ) {
-      return null;
-    }
-
-    return { userId: payload.userId };
+    return payload.userId as string;
   } catch {
     return null;
   }
 }
 
-export function getSessionUserIdFromRequest(request: NextRequest) {
-  const token = request.cookies.get(sessionCookieName)?.value;
+/** ページ・API ルートの両方から使える、ログイン中ユーザーIDの取得。 */
+export async function getCurrentUserId() {
+  const cookieStore = await cookies();
 
-  if (!token) {
-    return null;
-  }
+  return verifySessionToken(cookieStore.get(sessionCookieName)?.value);
+}
 
-  return verifySessionToken(token)?.userId ?? null;
+function setCookie(response: NextResponse, value: string, maxAge: number) {
+  response.cookies.set({
+    name: sessionCookieName,
+    value,
+    maxAge,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
 }
 
 export function setSessionCookie(response: NextResponse, userId: string) {
-  response.cookies.set({
-    name: sessionCookieName,
-    value: createSessionToken(userId),
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: sessionMaxAgeSeconds,
-  });
+  setCookie(response, createSessionToken(userId), sessionMaxAgeSeconds);
 }
 
 export function clearSessionCookie(response: NextResponse) {
-  response.cookies.set({
-    name: sessionCookieName,
-    value: "",
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 0,
-  });
+  setCookie(response, "", 0);
 }
